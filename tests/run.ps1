@@ -164,6 +164,61 @@ foreach ($row in $rows) {
 		foreach ($f in $fails) { Write-Output "FAIL $name [pwsh]: $f" }
 	} else { $script:pass++ }
 }
+# --- install.ps1, against a fake release: latest is this fp, v0.1.0 an older one, v0.0.1 no fp
+
+$Rel = Join-Path $Tmp 'release'
+foreach ($d in 'latest/download', 'download/v0.1.0', 'download/v0.0.1') { New-Item -ItemType Directory -Force "$Rel/$d" | Out-Null }
+$Cmd = Join-Path $PSScriptRoot '..' 'fp.cmd'
+Copy-Item $Fp, $Cmd "$Rel/latest/download"
+(Get-Content -Raw $Fp) -replace "(?m)^\`$FpVersion = '[^']+'", "`$FpVersion = '0.1.0'" | Set-Content -NoNewline "$Rel/download/v0.1.0/fp.ps1"
+Copy-Item $Cmd "$Rel/download/v0.1.0"
+Set-Content "$Rel/download/v0.0.1/fp.ps1" '<html>Not Found</html>'
+Copy-Item $Cmd "$Rel/download/v0.0.1"
+$Now = [regex]::Match((Get-Content -Raw $Fp), "\`$FpVersion = '([^']+)'").Groups[1].Value
+$Local = Join-Path $Tmp 'local'
+$Installed = "$Local/Programs/fp"
+
+function Invoke-Install([hashtable]$Env) {
+	$psi = [Diagnostics.ProcessStartInfo]::new($Pwsh)
+	foreach ($a in '-NoLogo', '-NoProfile', '-File', (Join-Path $PSScriptRoot '..' 'install.ps1')) { $psi.ArgumentList.Add($a) }
+	$psi.RedirectStandardInput = $true; $psi.RedirectStandardOutput = $true; $psi.RedirectStandardError = $true
+	$psi.Environment['LOCALAPPDATA'] = $Local
+	$psi.Environment['FP_BASE_URL'] = "file://$Rel"
+	$psi.Environment.Remove('FP_VERSION') | Out-Null
+	foreach ($k in $Env.Keys) { if ($null -eq $Env[$k]) { $psi.Environment.Remove($k) | Out-Null } else { $psi.Environment[$k] = $Env[$k] } }
+	$p = [Diagnostics.Process]::Start($psi)
+	$p.StandardInput.Close()
+	$err = $p.StandardError.ReadToEndAsync()
+	$out = $p.StandardOutput.ReadToEnd()
+	$p.WaitForExit()
+	return @{ Out = ($out + $err.Result); Code = $p.ExitCode }
+}
+function Get-Installed {
+	if (-not (Test-Path "$Installed/fp.ps1")) { return '' }
+	[regex]::Match((Get-Content -Raw "$Installed/fp.ps1"), "\`$FpVersion = '([^']+)'").Groups[1].Value
+}
+function Test-Install([string]$Name, [hashtable]$Env, [int]$Code, [string]$Want, [string]$Version) {
+	$r = Invoke-Install $Env
+	$fails = @()
+	if ($r.Code -ne $Code) { $fails += "exit $($r.Code), expected $Code; output: $($r.Out)" }
+	if (-not $r.Out.Contains($Want)) { $fails += "no `"$Want`" in: $($r.Out)" }
+	if ($Version -and (Get-Installed) -ne $Version) { $fails += "installed fp.ps1 is $(Get-Installed), expected $Version" }
+	if ($Version -and -not (Test-Path "$Installed/fp.cmd")) { $fails += 'no fp.cmd' }
+	if ($fails) { $script:failed++; foreach ($f in $fails) { Write-Output "FAIL $Name [pwsh]: $f" } } else { $script:pass++ }
+}
+
+$withPwsh = Split-Path $Pwsh
+Test-Install 'install: the latest' @{ PATH = $withPwsh } 0 "fp $Now installed: $Installed" $Now
+Test-Install 'install: FP_VERSION picks one' @{ PATH = $withPwsh; FP_VERSION = '0.1.0' } 0 'fp 0.1.0 installed' '0.1.0'
+Test-Install 'install: a v in FP_VERSION' @{ PATH = $withPwsh; FP_VERSION = 'v0.1.0' } 0 'fp 0.1.0 installed' '0.1.0'
+Test-Install 'install: a rerun upgrades' @{ PATH = $withPwsh } 0 "fp $Now installed" $Now
+Test-Install 'install: a missing version' @{ PATH = $withPwsh; FP_VERSION = '9.9.9' } 1 "cannot download file://$Rel/download/v9.9.9/fp.ps1" $Now
+Test-Install 'install: a download that is not fp' @{ PATH = $withPwsh; FP_VERSION = '0.0.1' } 1 'is not fp' $Now
+# PowerShell 7 missing is said under Windows PowerShell 5.1 alone, which this Mac has not: read only.
+if (-not $IsWindows) {
+	Test-Install 'install: Windows only' @{ PATH = $withPwsh; FP_BASE_URL = $null } 1 'this installer is for Windows; on macOS and Linux: curl' $Now
+}
+
 Remove-Item -Recurse -Force $Tmp
 Write-Output "$($script:pass) passed, $($script:failed) failed"
 exit ([int]($script:failed -ne 0))

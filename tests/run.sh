@@ -140,5 +140,41 @@ for sh in $shells; do
 		if row; then pass=$((pass + 1)); else failed=$((failed + 1)); fi
 	done <"$TABLE"
 done
+# --- install.sh, against a fake release: latest is this fp, v0.1.0 an older one, v0.0.1 no fp
+
+REL=$TMP/release
+mkdir -p "$REL/latest/download" "$REL/download/v0.1.0" "$REL/download/v0.0.1"
+cp "$FP" "$REL/latest/download/fp"
+sed 's/^FP_VERSION=.*/FP_VERSION=0.1.0/' "$FP" >"$REL/download/v0.1.0/fp"
+printf '<html>Not Found</html>\n' >"$REL/download/v0.0.1/fp"
+now=$(sed -n 's/^FP_VERSION=//p' "$FP")
+IH=$TMP/ihome
+
+install_case() { # name code expected-output env...
+	name=$1 code=$2 want=$3; shift 3
+	OUT=$(env HOME="$IH" FP_BASE_URL="file://$REL" "$@" "$sh" "$here/../install.sh" 2>&1)
+	CODE=$?
+	ok=1
+	[ "$CODE" = "$code" ] || fail "exit $CODE, expected $code; output: $OUT"
+	case $OUT in *"$want"*) ;; *) fail "no \"$want\" in: $OUT" ;; esac
+	installed=$("$IH/.local/bin/fp" --version 2>&1)
+}
+check_installed() { [ "$installed" = "$1" ] || fail "installed fp says $installed, expected $1"; }
+count() { if [ -n "$ok" ]; then pass=$((pass + 1)); else failed=$((failed + 1)); fi; }
+
+for sh in $shells; do
+	sh=$(command -v "$sh") || continue
+	rm -rf "$IH"; mkdir -p "$IH"
+	install_case "install: the latest" 0 "fp $now installed: $IH/.local/bin/fp" PATH="$PATH"; check_installed "$now"; count
+	install_case "install: a PATH hint" 0 "$IH/.local/bin is not on your PATH" PATH="$PATH"; count
+	install_case "install: no hint on the PATH" 0 "installed" PATH="$IH/.local/bin:$PATH"
+	case $OUT in *"not on your PATH"*) fail "a hint: $OUT" ;; esac; count
+	install_case "install: FP_VERSION picks one" 0 "fp 0.1.0 installed" FP_VERSION=0.1.0 PATH="$PATH"; check_installed 0.1.0; count
+	install_case "install: a v in FP_VERSION" 0 "fp 0.1.0 installed" FP_VERSION=v0.1.0 PATH="$PATH"; check_installed 0.1.0; count
+	install_case "install: a rerun upgrades" 0 "fp $now installed" PATH="$PATH"; check_installed "$now"; count
+	install_case "install: a missing version" 1 "cannot download file://$REL/download/v9.9.9/fp" FP_VERSION=9.9.9 PATH="$PATH"; check_installed "$now"; count
+	install_case "install: a download that is not fp" 1 "is not fp" FP_VERSION=0.0.1 PATH="$PATH"; check_installed "$now"; count
+done
+
 echo "$pass passed, $failed failed"
 [ "$failed" = 0 ]

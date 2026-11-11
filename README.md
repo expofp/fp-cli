@@ -10,27 +10,44 @@ that says how to install it.
 
 ## Install
 
-macOS and Linux (`fp` is a POSIX `sh` script):
+macOS and Linux:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/expofp/fp-cli/main/install.sh | sh
+```
+
+Windows, in PowerShell (Windows PowerShell 5.1 or PowerShell 7):
+
+```powershell
+irm https://raw.githubusercontent.com/expofp/fp-cli/main/install.ps1 | iex
+```
+
+Both take `fp` from the latest release, never from `main`, and print the version installed; run
+again to upgrade. `FP_VERSION=0.2.0` before `sh` (Windows: `$env:FP_VERSION = '0.2.0'` first)
+picks a release. Neither needs `sudo` or administrator rights.
+
+- `install.sh` puts `fp`, a POSIX `sh` script, into `~/.local/bin`. It edits no shell file: when
+  that folder is not on your `PATH`, it prints the line to add.
+- `install.ps1` puts `fp.cmd` and `fp.ps1` into `%LOCALAPPDATA%\Programs\fp` and adds that folder
+  to your user `PATH`. `fp` itself runs with PowerShell 7; the installer says so when it is
+  missing (`winget install Microsoft.PowerShell`). `fp.cmd` runs `fp.ps1` with `pwsh`, so `fp`
+  works from `cmd`, PowerShell and other programs alike.
+
+By hand, the same from the release's files:
 
 ```sh
 mkdir -p ~/.local/bin
-curl -fsSL https://raw.githubusercontent.com/expofp/fp-cli/main/fp -o ~/.local/bin/fp && chmod +x ~/.local/bin/fp
+curl -fsSL https://github.com/expofp/fp-cli/releases/latest/download/fp -o ~/.local/bin/fp && chmod +x ~/.local/bin/fp
 ```
-
-`~/.local/bin` must be on your `PATH`.
-
-Windows (PowerShell 7 is needed: `winget install Microsoft.PowerShell`), into a folder on your `PATH`:
 
 ```powershell
 $dir = "$env:LOCALAPPDATA\Programs\fp"
 New-Item -ItemType Directory -Force $dir | Out-Null
-irm https://raw.githubusercontent.com/expofp/fp-cli/main/fp.cmd -OutFile "$dir\fp.cmd"
-irm https://raw.githubusercontent.com/expofp/fp-cli/main/fp.ps1 -OutFile "$dir\fp.ps1"
+irm https://github.com/expofp/fp-cli/releases/latest/download/fp.cmd -OutFile "$dir\fp.cmd"
+irm https://github.com/expofp/fp-cli/releases/latest/download/fp.ps1 -OutFile "$dir\fp.ps1"
 # once: add $dir to your user PATH
 [Environment]::SetEnvironmentVariable('Path', [Environment]::GetEnvironmentVariable('Path', 'User') + ";$dir", 'User')
 ```
-
-`fp.cmd` runs `fp.ps1` with `pwsh`, so `fp` works from `cmd`, PowerShell and other programs alike.
 
 ## The pin
 
@@ -109,10 +126,11 @@ The target runs in the folder `fp` was run in, with every argument as given; its
 ## Tests
 
 `tests/scenarios.txt` is one table of scenarios; `tests/run.sh` runs it against `fp` under `/bin/sh`
-and `dash`, `tests/run.ps1` against `fp.ps1` under `pwsh`:
+and `dash`, `tests/run.ps1` against `fp.ps1` under `pwsh`. Each runner then tries its installer
+against a fake release in a temporary folder (`FP_BASE_URL`, for tests only):
 
 ```sh
-shellcheck fp tests/run.sh && tests/run.sh && pwsh tests/run.ps1
+shellcheck fp install.sh tests/run.sh && tests/run.sh && pwsh tests/run.ps1
 ```
 
-`fp.cmd` has no test of its own.
+`fp.cmd` has no test of its own, nor `install.ps1` under Windows PowerShell 5.1 or on Windows.
