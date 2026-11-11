@@ -29,9 +29,9 @@
 #   nofile <file>       the file does not exist
 
 # fp's own words
-version | | . | --version | 0 | out 0.1.0
+version | | . | --version | 0 | out 0.2.0
 no pin, no word | | . | | 2 | out fp init <pointer> ; out usage: fp
-no pin, a word | | . | guide | 2 | out no .fp here or above ; out usage: fp
+no pin, a word | | . | guide | 2 | out no .fp here or in any folder above ; out usage: fp
 words take no arguments | | . | where now | 2 | out fp where takes no arguments
 init needs a pointer | | . | init | 2 | out fp init needs a pointer
 
@@ -67,30 +67,30 @@ a git checkout runs without git | fp . init git:example.test/acme/tool@main ; fp
 a new git checkout needs git | fp . init git:example.test/acme/tool@main ; nogit | . | guide | 1 | out a git pin needs git
 
 # lookup
-up to the git root | repo . ; target t1 ; fp . init $W/t1 ; dir a/b | a/b | guide | 0 | out t1: guide
-not past the git root | target t1 ; fp . init $W/t1 ; repo inner ; dir inner/sub | inner/sub | guide | 2 | out no .fp here or above
-outside git, here only | target t1 ; fp . init $W/t1 ; dir sub | sub | guide | 2 | out no .fp here or above
+a ~/.fp for everything under home | target t1 ; fp home init $W/t1 ; dir home/projects/map | home/projects/map | guide | 0 | out t1: guide
+up from a subfolder | repo . ; target t1 ; fp . init $W/t1 ; dir a/b | a/b | guide | 0 | out t1: guide
+past a git root | target t1 ; fp . init $W/t1 ; repo inner ; dir inner/sub | inner/sub | guide | 0 | out t1: guide
+outside git, up too | target t1 ; fp . init $W/t1 ; dir a/b | a/b | guide | 0 | out t1: guide
 .fp.local before .fp | target t1 ; target t2 ; fp . init $W/t1 ; fp . pin $W/t2 ; write .fp.local $W/t1 | . | guide | 0 | out t1: guide
 the nearest folder first | repo . ; target t1 ; target t2 ; fp . init $W/t1 ; dir sub ; fp sub init $W/t2 | sub | guide | 0 | out t2: guide
 an empty .fp | write .fp | . | guide | 1 | out .fp is empty
 
-# trust
-a pin from elsewhere is not run | target t1 ; write .fp $W/t1 | . | guide | 1 | out not trusted on this machine yet ; out fp trust ; noout t1:
-fp trust needs a terminal | target t1 ; write .fp $W/t1 | . | trust | 1 | out fp trust asks on a terminal
-fp trust of a trusted pin | target t1 ; fp . init $W/t1 | . | trust | 0 | out already trusted
-trust is by folder | target t1 ; fp . init $W/t1 ; dir sub ; write sub/.fp $W/t1 | sub | guide | 1 | out not trusted on this machine yet
+# no trust: any pin runs
+a pin written by hand runs | target t1 ; write .fp $W/t1 | . | guide | 0 | out t1: guide
+a pin in a cloned folder runs | target t1 ; repo clone ; write clone/.fp $W/t1 | clone | guide | 0 | out t1: guide
+trust is the target's word | target t1 ; fp . init $W/t1 | . | trust | 0 | out t1: trust
 
 # where
-where a path pin | target t1 ; fp . init $W/t1 | . | where | 0 | out $W/t1 ; out pinned in $W/.fp ; noout not trusted
+where a path pin | target t1 ; fp . init $W/t1 | . | where | 0 | out $W/t1 ; out pinned in $W/.fp
 where a command pin | fp . init fpecho hello | . | where | 0 | out fpecho hello ; out pinned in $W/.fp
 where a git pin | fp . init git:example.test/acme/tool@main | . | where | 0 | out $HOME/.cache/fp/checkouts/example.test/acme/tool/$SHA1 (not fetched yet)
 where a fetched git pin | fp . init git:example.test/acme/tool@main ; fp . guide | . | where | 0 | out $HOME/.cache/fp/checkouts/example.test/acme/tool/$SHA1 ; noout not fetched
-where an untrusted pin | target t1 ; write .fp $W/t1 | . | where | 0 | out not trusted here yet: fp trust
+where a pin written by hand | target t1 ; write .fp $W/t1 | . | where | 0 | out $W/t1 ; out pinned in $W/.fp
 where with no pin | | . | where | 2 | out fp init <pointer>
 
 # pin and upgrade
 pin changes the pin | target t1 ; target t2 ; fp . init $W/t1 | . | pin $W/t2 | 0 | first .fp $W/t2
-a new pin is trusted | target t1 ; target t2 ; fp . init $W/t1 ; fp . pin $W/t2 | . | guide | 0 | out t2: guide
+a new pin runs | target t1 ; target t2 ; fp . init $W/t1 ; fp . pin $W/t2 | . | guide | 0 | out t2: guide
 pin rewrites the file found | repo . ; target t1 ; target t2 ; fp . init $W/t1 ; dir sub | sub | pin $W/t2 | 0 | first .fp $W/t2 ; nofile sub/.fp
 pin rewrites .fp.local | target t1 ; target t2 ; fp . init $W/t1 ; write .fp.local $W/t1 | . | pin $W/t2 | 0 | first .fp.local $W/t2 ; first .fp $W/t1
 pin with no pin writes .fp here | target t1 | . | pin $W/t1 | 0 | first .fp $W/t1 ; nofile AGENTS.md
@@ -98,5 +98,5 @@ pin checks the pointer | target t1 ; fp . init $W/t1 | . | pin nosuchtool | 1 | 
 upgrade a git pin | fp . init git:example.test/acme/tool@main ; commit | . | upgrade | 0 | first .fp git:example.test/acme/tool@main#$SHA2
 run an upgraded pin | fp . init git:example.test/acme/tool@main ; fp . guide ; commit ; fp . upgrade | . | guide | 0 | out git v2: guide
 upgrade at the newest | fp . init git:example.test/acme/tool@main | . | upgrade | 0 | out already the newest
-upgrade keeps an untrusted pin untrusted | write .fp git:example.test/acme/tool@main#$SHA1 ; commit ; fp . upgrade | . | guide | 1 | out not trusted on this machine yet
+upgrade a pin written by hand | write .fp git:example.test/acme/tool@main#$SHA1 ; commit ; fp . upgrade | . | guide | 0 | out git v2: guide
 upgrade a path pin | target t1 ; fp . init $W/t1 | . | upgrade | 1 | out fp upgrade moves git pins only

@@ -30,7 +30,7 @@ trim() { T=${1#"${1%%[! ]*}"}; T=${T%"${T##*[! ]}"}; }
 # --- fixtures: the PATH, the git repo
 
 mkdir -p "$FIX/bin" "$FIX/nogit"
-for t in uname mkdir mv rm shasum sha256sum grep cat git; do
+for t in uname mkdir mv rm grep cat git; do
 	p=$(command -v "$t") || continue
 	ln -s "$p" "$FIX/bin/$t"
 	[ "$t" = git ] || ln -s "$p" "$FIX/nogit/$t"

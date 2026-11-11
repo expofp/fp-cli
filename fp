@@ -4,11 +4,10 @@
 # shellcheck disable=SC2015,SC2016,SC2088 # A && B || die is meant; backticks and ~ are text
 set -f
 
-FP_VERSION=0.1.0
+FP_VERSION=0.2.0
 AGENTS_LINE='Run `fp guide` first and follow it.'
 CLAUDE_LINE='@AGENTS.md'
 CACHE=$HOME/.cache/fp
-TRUSTED=$HOME/.config/fp/trusted
 CR=$(printf '\r')
 
 say() { printf '%s\n' "$*"; }
@@ -20,43 +19,30 @@ usage() {
 		'       fp init <pointer>     pin this folder: writes .fp, AGENTS.md and CLAUDE.md' \
 		'       fp pin <pointer>      change the pin' \
 		'       fp upgrade            move a git pin to its branch'"'"'s newest commit' \
-		'       fp trust              trust the pin found here' \
 		'       fp where              show what the pin runs and the file it comes from' \
 		'       fp --version' \
 		'a pointer: /abs/path | ~/path | git:<host>/<owner>/<repo>@<branch> | <command> [args]' >&2
 }
 usage_error() { printf 'fp: %s\n' "$*" >&2; usage; exit 2; }
 
-# --- lookup: from here up to the git root (outside git: here only); .fp.local, then .fp
+# --- lookup: from here up to /; in each folder .fp.local, then .fp
 
 CWD=$(pwd -P) || die "cannot read the current folder"
 
 parent() { P=${1%/*}; [ -n "$P" ] || P=/; }
 join() { J=${1%/}/$2; }
 
-find_root() {
-	d=$CWD
-	while :; do
-		if [ -e "${d%/}/.git" ]; then ROOT=$d; return; fi
-		[ "$d" = / ] && break
-		parent "$d"; d=$P
-	done
-	ROOT=$CWD
-}
-
 lookup() {
-	find_root
 	d=$CWD
 	while :; do
 		for f in .fp.local .fp; do
 			join "$d" "$f"
 			if [ -f "$J" ]; then
-				PIN_DIR=$d PIN_FILE=$J
+				PIN_FILE=$J
 				read_pin "$J"
 				return 0
 			fi
 		done
-		[ "$d" = "$ROOT" ] && return 1
 		[ "$d" = / ] && return 1
 		parent "$d"; d=$P
 	done
@@ -76,7 +62,7 @@ read_pin() {
 }
 
 no_pin() {
-	printf 'fp: no .fp here or above (up to the git root); pin this folder first: fp init <pointer>\n' >&2
+	printf 'fp: no .fp here or in any folder above; pin this folder first: fp init <pointer>\n' >&2
 	usage
 	exit 2
 }
@@ -167,35 +153,6 @@ check_pointer() {
 	esac
 }
 
-# --- trust: by a hash of the folder and the pin line
-
-hash_pin() {
-	if command -v shasum >/dev/null 2>&1; then
-		h=$(printf '%s\n%s' "$1" "$2" | shasum -a 256)
-	elif command -v sha256sum >/dev/null 2>&1; then
-		h=$(printf '%s\n%s' "$1" "$2" | sha256sum)
-	else
-		die "fp needs shasum or sha256sum to remember trusted pins (Linux: the coreutils package)"
-	fi
-	HASH=${h%%[[:space:]]*}
-}
-
-is_trusted() { hash_pin "$1" "$2"; [ -f "$TRUSTED" ] && grep -qxF "$HASH" "$TRUSTED"; }
-
-add_trust() {
-	is_trusted "$1" "$2" && return
-	mkdir -p "${TRUSTED%/*}" && printf '%s\n' "$HASH" >>"$TRUSTED" || die "cannot write $TRUSTED"
-}
-
-ask_trust() {
-	[ -t 0 ] || return 2
-	printf 'Run `%s` for %s? [y/N] ' "$PIN_LINE" "$PIN_DIR" >&2
-	ans=
-	read -r ans || return 1
-	case $ans in y | Y | yes | Yes | YES) return 0 ;; esac
-	return 1
-}
-
 # --- the words
 
 write_pin() { # file line
@@ -219,7 +176,6 @@ cmd_init() {
 	[ -e .fp ] && die ".fp already exists here; change it with fp pin <pointer> (or fp upgrade for a git pin)"
 	check_pointer "$*"
 	write_pin .fp "$LINE"
-	add_trust "$CWD" "$LINE"
 	say ".fp: $LINE"
 	add_line AGENTS.md "$AGENTS_LINE"
 	add_line CLAUDE.md "$CLAUDE_LINE"
@@ -227,10 +183,9 @@ cmd_init() {
 
 cmd_pin() {
 	[ $# -gt 0 ] || usage_error "fp pin needs a pointer"
-	if lookup; then file=$PIN_FILE dir=$PIN_DIR; else join "$CWD" .fp; file=$J dir=$CWD; fi
+	if lookup; then file=$PIN_FILE; else join "$CWD" .fp; file=$J; fi
 	check_pointer "$*"
 	write_pin "$file" "$LINE"
-	add_trust "$dir" "$LINE"
 	say "$file: $LINE"
 }
 
@@ -243,23 +198,8 @@ cmd_upgrade() {
 	resolve_branch
 	if [ "$old" = "$SHA" ]; then say "$PIN_FILE: $PIN_LINE, already the newest"; return; fi
 	LINE=git:$REPO@$BRANCH#$SHA
-	trusted=
-	is_trusted "$PIN_DIR" "$PIN_LINE" && trusted=1
 	write_pin "$PIN_FILE" "$LINE"
-	[ -n "$trusted" ] && add_trust "$PIN_DIR" "$LINE"
 	say "$PIN_FILE: $LINE"
-}
-
-cmd_trust() {
-	[ $# -eq 0 ] || usage_error "fp trust takes no arguments"
-	lookup || no_pin
-	if is_trusted "$PIN_DIR" "$PIN_LINE"; then say "already trusted: $PIN_LINE for $PIN_DIR"; return; fi
-	ask_trust
-	case $? in
-	0) add_trust "$PIN_DIR" "$PIN_LINE"; say "trusted: $PIN_LINE for $PIN_DIR" ;;
-	2) die "fp trust asks on a terminal; run it in one" ;;
-	*) die "not trusted" ;;
-	esac
 }
 
 cmd_where() {
@@ -275,7 +215,6 @@ cmd_where() {
 	command) say "$PIN_LINE" ;;
 	esac
 	say "pinned in $PIN_FILE"
-	is_trusted "$PIN_DIR" "$PIN_LINE" || say "not trusted here yet: fp trust"
 }
 
 # --- running the pin
@@ -316,14 +255,6 @@ run_exe() { # dir args...
 run_pin() {
 	lookup || no_pin
 	classify "$PIN_LINE"
-	if ! is_trusted "$PIN_DIR" "$PIN_LINE"; then
-		ask_trust
-		case $? in
-		0) add_trust "$PIN_DIR" "$PIN_LINE" ;;
-		2) die "$PIN_FILE pins \`$PIN_LINE\`, not trusted on this machine yet; a person runs fp trust in a terminal there" ;;
-		*) die "not run: \`$PIN_LINE\` is not trusted for $PIN_DIR" ;;
-		esac
-	fi
 	case $KIND in
 	path) run_exe "$TARGET" "$@" ;;
 	git)
@@ -345,7 +276,6 @@ case ${1-} in
 init) shift; cmd_init "$@" ;;
 pin) shift; cmd_pin "$@" ;;
 upgrade) shift; cmd_upgrade "$@" ;;
-trust) shift; cmd_trust "$@" ;;
 where) shift; cmd_where "$@" ;;
 *) run_pin "$@" ;;
 esac
