@@ -1,3 +1,127 @@
 # fp
 
-A global `fp` command that runs the tool a folder is pinned to.
+`fp` is a small global command that knows nothing about any tool. In a folder it finds the
+folder's pin, a `.fp` file, and runs what the pin names, passing every argument through and
+returning its exit code. One folder can point `fp` at a local worktree, another at a git commit,
+a third at an `npx` package.
+
+It has no dependencies and never installs anything. A tool it needs and cannot find is an error
+that says how to install it.
+
+## Install
+
+macOS and Linux (`fp` is a POSIX `sh` script):
+
+```sh
+mkdir -p ~/.local/bin
+curl -fsSL https://raw.githubusercontent.com/expofp/fp-cli/main/fp -o ~/.local/bin/fp && chmod +x ~/.local/bin/fp
+```
+
+`~/.local/bin` must be on your `PATH`.
+
+Windows (PowerShell 7 is needed: `winget install Microsoft.PowerShell`), into a folder on your `PATH`:
+
+```powershell
+$dir = "$env:LOCALAPPDATA\Programs\fp"
+New-Item -ItemType Directory -Force $dir | Out-Null
+irm https://raw.githubusercontent.com/expofp/fp-cli/main/fp.cmd -OutFile "$dir\fp.cmd"
+irm https://raw.githubusercontent.com/expofp/fp-cli/main/fp.ps1 -OutFile "$dir\fp.ps1"
+# once: add $dir to your user PATH
+[Environment]::SetEnvironmentVariable('Path', [Environment]::GetEnvironmentVariable('Path', 'User') + ";$dir", 'User')
+```
+
+`fp.cmd` runs `fp.ps1` with `pwsh`, so `fp` works from `cmd`, PowerShell and other programs alike.
+
+## The pin
+
+`fp` looks for the pin from the current folder up to the root of its git repository (outside a git
+repository: in the current folder only). In each folder it reads `.fp.local` first, then `.fp`; the
+first one found wins. `.fp` is meant to be committed; `.fp.local` is a personal override, meant to
+be git-ignored (`fp` does not touch `.gitignore`).
+
+A pin is one line, one of three kinds of pointer:
+
+| Pointer | Runs |
+| --- | --- |
+| `/abs/path` or `~/path` | `<path>/bin/fp` (Windows: `<path>\bin\fp.ps1` with `pwsh`) |
+| `git:<host>/<owner>/<repo>@<branch>#<sha>` | `bin/fp` of that commit, checked out once under `~/.cache/fp/` (Windows: `%LOCALAPPDATA%\fp\`) |
+| a command, e.g. `npx -y @expofp/fp@1.2.0` | the command, with the arguments after it |
+
+- A **git** pin uses the system's `git` and your own git login, so private repositories work as they
+  do for you. Each repository is cloned once, its file contents fetched only as needed
+  (`--filter=blob:none`); each commit is checked out once and reused. `fp init` and `fp pin` write
+  the branch's newest commit; `fp upgrade` moves to a newer one. A checkout already made runs without
+  the network, and without `git`.
+- A **command** is split on spaces; quotes are refused. Its first word must be on the `PATH`.
+
+## The words
+
+These words are `fp`'s own; every other word goes to the target.
+
+| Word | Does |
+| --- | --- |
+| `fp init <pointer>` | pins this folder: checks the pointer can run, then writes `.fp`; `AGENTS.md` with the one line ``Run `fp guide` first and follow it.``; `CLAUDE.md` with `@AGENTS.md`. An existing `AGENTS.md` or `CLAUDE.md` is kept, the line added at the top when it is missing. Nothing else: no folders, no `git init`, no call to the target. Refused where a `.fp` exists. |
+| `fp pin <pointer>` | the same checks, then rewrites the pin `fp` finds (or this folder's `.fp`) |
+| `fp upgrade` | a git pin only: resolves its branch again and writes the new commit |
+| `fp trust` | trusts the pin `fp` finds, asking on a terminal |
+| `fp where` | prints what the pin resolves to (the path, the checkout or the command) and the file it comes from |
+| `fp --version` | `fp`'s own version |
+
+With no pin found, any other word is an error that names `fp init`.
+
+```sh
+fp init ~/projects/efp                      # a local checkout or worktree
+fp init git:github.com/expofp/efp@main      # writes git:github.com/expofp/efp@main#<the newest sha>
+fp init npx -y @expofp/fp                   # a command
+fp guide                                    # runs the pinned tool's guide
+```
+
+## Trust
+
+A pin is a command your machine will run, and a pin can arrive with a repository you clone. So `fp`
+runs a pin only once it is trusted on this machine:
+
+- a pin written by `fp init` or `fp pin` here is trusted at once (`fp upgrade` keeps a pin's trust);
+- any other pin asks once on a terminal: ``Run `<pointer>` for <folder>? [y/N]``. Without a terminal
+  (agents run `fp` without one) it is an error that asks a person to run `fp trust` there.
+
+Trusted pins are kept as a hash of the folder and the pin line in `~/.config/fp/trusted` (Windows:
+`%APPDATA%\fp\trusted`). A pin that changes is a new pin.
+
+## Errors
+
+`fp`'s own errors start with `fp:` and exit with 1; a usage error (no pin, a word missing its
+pointer) exits with 2 and prints the usage. Every other exit code is the target's. The tools it may
+need, and what it says when one is missing:
+
+| Missing | Needed for | The fix it names |
+| --- | --- | --- |
+| `git` | a git pin's first checkout, `init`, `pin`, `upgrade` of git pins | macOS: `xcode-select --install`; Linux: the package manager; Windows: `winget install Git.Git` |
+| `shasum` or `sha256sum` | trust (`sh` only) | Linux: the `coreutils` package |
+| a command pin's first word | running it | ``npx`` / ``npm`` / ``node``: Node, https://nodejs.org; otherwise "`<word>` is not on the PATH" |
+| PowerShell 7 | Windows | `winget install Microsoft.PowerShell` |
+
+## The target's contract
+
+A folder or repository `fp` can point at provides:
+
+- `bin/fp`, an executable (`sh` or anything with a shebang), and `bin/fp.ps1`, its PowerShell 7
+  twin for Windows;
+- the word `guide`, which prints how to work with it: `AGENTS.md` written by `fp init` tells agents
+  to run `fp guide` first;
+- no words of its own named `init`, `pin`, `upgrade`, `trust`, `where` or `--version`: `fp` keeps
+  those and never passes them on.
+
+The target runs in the folder `fp` was run in, with every argument as given; its exit code is
+`fp`'s.
+
+## Tests
+
+`tests/scenarios.txt` is one table of scenarios; `tests/run.sh` runs it against `fp` under `/bin/sh`
+and `dash`, `tests/run.ps1` against `fp.ps1` under `pwsh`:
+
+```sh
+shellcheck fp tests/run.sh && tests/run.sh && pwsh tests/run.ps1
+```
+
+`fp.cmd` has no test of its own.
