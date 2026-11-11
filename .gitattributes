@@ -1,2 +1,3 @@
 * text=auto eol=lf
-*.cmd text eol=crlf
+# fp.cmd is kept with CRLF as is, so a raw download is a proper batch file
+*.cmd -text
