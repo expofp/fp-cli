@@ -1,0 +1,102 @@
+# fp's scenario table: one row per scenario, read by tests/run.sh (fp under /bin/sh and dash)
+# and tests/run.ps1 (fp.ps1 under pwsh). Columns are separated by "|":
+#
+#   name | setup | folder | arguments | exit code | expectations
+#
+# Each row runs in a fresh workspace $W with its own $HOME ($W/home), stdin not a terminal, and a
+# PATH holding only fpecho (prints "fpecho: <args>"), git and the few tools fp uses.
+# Placeholders: $W, $HOME, $SHA1 and $SHA2 (main's and next's commits in the git fixture).
+#
+# setup, steps separated by " ; ":
+#   repo <dir>          makes <dir> a git repo's root (a .git folder in it)
+#   dir <dir>           makes <dir>
+#   target <dir>        makes a target: <dir>/bin/fp and bin/fp.ps1 print "<name of dir>: <args>",
+#                       and with the arguments "exit <n>" exit with <n>
+#   write <file> <text> writes the text and a newline (no text: an empty file)
+#   remove <file>       removes the file
+#   fp <dir> <args>     runs fp in <dir>; it must succeed
+#   commit              moves the fixture's main to $SHA2
+#   nogit               the row's run (not setup) has no git on the PATH
+# The git fixture is git:example.test/acme/tool: main at $SHA1 whose bin/fp prints "git v1: <args>",
+# next at $SHA2 printing "git v2: <args>".
+#
+# folder: where the row runs, relative to $W. arguments: split on spaces.
+# expectations, separated by " ; ":
+#   out <text>          the output (stdout and stderr) contains the text
+#   noout <text>        the output does not contain it
+#   first <file> <text> the file's first line is the text
+#   has <file> <text>   the file has a line that is the text
+#   nofile <file>       the file does not exist
+
+# fp's own words
+version | | . | --version | 0 | out 0.1.0
+no pin, no word | | . | | 2 | out fp init <pointer> ; out usage: fp
+no pin, a word | | . | guide | 2 | out no .fp here or above ; out usage: fp
+words take no arguments | | . | where now | 2 | out fp where takes no arguments
+init needs a pointer | | . | init | 2 | out fp init needs a pointer
+
+# init
+init a path | repo . ; target t1 | . | init $W/t1 | 0 | first .fp $W/t1 ; first AGENTS.md Run `fp guide` first and follow it. ; first CLAUDE.md @AGENTS.md
+init writes only those | target t1 | . | init $W/t1 | 0 | nofile .git ; nofile .fp.local ; noout t1:
+init keeps AGENTS.md and CLAUDE.md | target t1 ; write AGENTS.md # Rules ; write CLAUDE.md # Claude | . | init $W/t1 | 0 | first AGENTS.md Run `fp guide` first and follow it. ; has AGENTS.md # Rules ; first CLAUDE.md @AGENTS.md ; has CLAUDE.md # Claude
+init leaves a present line alone | target t1 ; write AGENTS.md Run `fp guide` first and follow it. | . | init $W/t1 | 0 | out AGENTS.md: has the line, kept
+init refuses a second .fp | target t1 ; fp . init $W/t1 | . | init $W/t1 | 1 | out .fp already exists here ; out fp pin <pointer> ; out fp upgrade
+init a path with no bin/fp | dir t1 | . | init $W/t1 | 1 | out $W/t1/bin/fp ; out not found ; nofile .fp ; nofile AGENTS.md
+init a relative path | | . | init ./t1 | 1 | out a path pin must be absolute or start with ~/ ; nofile .fp
+init a ~ path | target home/t9 | . | init ~/t9 | 0 | first .fp ~/t9
+init a command | | . | init fpecho hello | 0 | first .fp fpecho hello
+init a missing command | | . | init nosuchtool x | 1 | out `nosuchtool` is not on the PATH ; nofile .fp
+init npx without Node | | . | init npx @expofp/fp | 1 | out `npx` is not on the PATH: it comes with Node, https://nodejs.org
+init refuses quotes | | . | init fpecho "x" | 1 | out quotes are not allowed ; nofile .fp
+init a git pin | | . | init git:example.test/acme/tool@main | 0 | first .fp git:example.test/acme/tool@main#$SHA1
+init a git pin, another branch | | . | init git:example.test/acme/tool@next | 0 | first .fp git:example.test/acme/tool@next#$SHA2
+init a git pin, no branch | | . | init git:example.test/acme/tool | 1 | out a git pin needs @<branch> ; nofile .fp
+init a git pin, a missing branch | | . | init git:example.test/acme/tool@nope | 1 | out no branch nope ; nofile .fp
+init a git pin without git | nogit | . | init git:example.test/acme/tool@main | 1 | out a git pin needs git, which is not on the PATH ; nofile .fp
+
+# running
+run a path pin | repo . ; target t1 ; fp . init $W/t1 | . | guide a b | 0 | out t1: guide a b
+run with no word | target t1 ; fp . init $W/t1 | . | | 0 | out t1:
+the exit code comes back | target t1 ; fp . init $W/t1 | . | exit 3 | 3 | out t1: exit 3
+run a ~ pin | target home/t9 ; fp . init ~/t9 | . | guide | 0 | out t9: guide
+run a command pin | fp . init fpecho hello | . | a b | 0 | out fpecho: hello a b
+a path pin that lost bin/fp | target t1 ; fp . init $W/t1 ; remove t1/bin/fp | . | guide | 1 | out $W/t1/bin/fp ; out not found (pinned in $W/.fp)
+run a git pin | fp . init git:example.test/acme/tool@main | . | guide x | 0 | out git v1: guide x
+run a git pin, another branch | fp . init git:example.test/acme/tool@next | . | guide | 0 | out git v2: guide
+a git checkout runs without git | fp . init git:example.test/acme/tool@main ; fp . guide ; nogit | . | guide | 0 | out git v1: guide
+a new git checkout needs git | fp . init git:example.test/acme/tool@main ; nogit | . | guide | 1 | out a git pin needs git
+
+# lookup
+up to the git root | repo . ; target t1 ; fp . init $W/t1 ; dir a/b | a/b | guide | 0 | out t1: guide
+not past the git root | target t1 ; fp . init $W/t1 ; repo inner ; dir inner/sub | inner/sub | guide | 2 | out no .fp here or above
+outside git, here only | target t1 ; fp . init $W/t1 ; dir sub | sub | guide | 2 | out no .fp here or above
+.fp.local before .fp | target t1 ; target t2 ; fp . init $W/t1 ; fp . pin $W/t2 ; write .fp.local $W/t1 | . | guide | 0 | out t1: guide
+the nearest folder first | repo . ; target t1 ; target t2 ; fp . init $W/t1 ; dir sub ; fp sub init $W/t2 | sub | guide | 0 | out t2: guide
+an empty .fp | write .fp | . | guide | 1 | out .fp is empty
+
+# trust
+a pin from elsewhere is not run | target t1 ; write .fp $W/t1 | . | guide | 1 | out not trusted on this machine yet ; out fp trust ; noout t1:
+fp trust needs a terminal | target t1 ; write .fp $W/t1 | . | trust | 1 | out fp trust asks on a terminal
+fp trust of a trusted pin | target t1 ; fp . init $W/t1 | . | trust | 0 | out already trusted
+trust is by folder | target t1 ; fp . init $W/t1 ; dir sub ; write sub/.fp $W/t1 | sub | guide | 1 | out not trusted on this machine yet
+
+# where
+where a path pin | target t1 ; fp . init $W/t1 | . | where | 0 | out $W/t1 ; out pinned in $W/.fp ; noout not trusted
+where a command pin | fp . init fpecho hello | . | where | 0 | out fpecho hello ; out pinned in $W/.fp
+where a git pin | fp . init git:example.test/acme/tool@main | . | where | 0 | out $HOME/.cache/fp/checkouts/example.test/acme/tool/$SHA1 (not fetched yet)
+where a fetched git pin | fp . init git:example.test/acme/tool@main ; fp . guide | . | where | 0 | out $HOME/.cache/fp/checkouts/example.test/acme/tool/$SHA1 ; noout not fetched
+where an untrusted pin | target t1 ; write .fp $W/t1 | . | where | 0 | out not trusted here yet: fp trust
+where with no pin | | . | where | 2 | out fp init <pointer>
+
+# pin and upgrade
+pin changes the pin | target t1 ; target t2 ; fp . init $W/t1 | . | pin $W/t2 | 0 | first .fp $W/t2
+a new pin is trusted | target t1 ; target t2 ; fp . init $W/t1 ; fp . pin $W/t2 | . | guide | 0 | out t2: guide
+pin rewrites the file found | repo . ; target t1 ; target t2 ; fp . init $W/t1 ; dir sub | sub | pin $W/t2 | 0 | first .fp $W/t2 ; nofile sub/.fp
+pin rewrites .fp.local | target t1 ; target t2 ; fp . init $W/t1 ; write .fp.local $W/t1 | . | pin $W/t2 | 0 | first .fp.local $W/t2 ; first .fp $W/t1
+pin with no pin writes .fp here | target t1 | . | pin $W/t1 | 0 | first .fp $W/t1 ; nofile AGENTS.md
+pin checks the pointer | target t1 ; fp . init $W/t1 | . | pin nosuchtool | 1 | out `nosuchtool` is not on the PATH ; first .fp $W/t1
+upgrade a git pin | fp . init git:example.test/acme/tool@main ; commit | . | upgrade | 0 | first .fp git:example.test/acme/tool@main#$SHA2
+run an upgraded pin | fp . init git:example.test/acme/tool@main ; fp . guide ; commit ; fp . upgrade | . | guide | 0 | out git v2: guide
+upgrade at the newest | fp . init git:example.test/acme/tool@main | . | upgrade | 0 | out already the newest
+upgrade keeps an untrusted pin untrusted | write .fp git:example.test/acme/tool@main#$SHA1 ; commit ; fp . upgrade | . | guide | 1 | out not trusted on this machine yet
+upgrade a path pin | target t1 ; fp . init $W/t1 | . | upgrade | 1 | out fp upgrade moves git pins only
