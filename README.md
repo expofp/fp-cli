@@ -34,9 +34,9 @@ irm https://raw.githubusercontent.com/expofp/fp-cli/main/fp.ps1 -OutFile "$dir\f
 
 ## The pin
 
-`fp` looks for the pin from the current folder up to the root of its git repository (outside a git
-repository: in the current folder only). In each folder it reads `.fp.local` first, then `.fp`; the
-first one found wins. `.fp` is meant to be committed; `.fp.local` is a personal override, meant to
+`fp` looks for the pin from the current folder up to the filesystem root. In each folder it reads
+`.fp.local` first, then `.fp`; the first one found wins. Git plays no part in it, so a `~/.fp` is a
+default for every folder under your home. `.fp` is meant to be committed; `.fp.local` is a personal override, meant to
 be git-ignored (`fp` does not touch `.gitignore`).
 
 A pin is one line, one of three kinds of pointer:
@@ -63,7 +63,6 @@ These words are `fp`'s own; every other word goes to the target.
 | `fp init <pointer>` | pins this folder: checks the pointer can run, then writes `.fp`; `AGENTS.md` with the one line ``Run `fp guide` first and follow it.``; `CLAUDE.md` with `@AGENTS.md`. An existing `AGENTS.md` or `CLAUDE.md` is kept, the line added at the top when it is missing. Nothing else: no folders, no `git init`, no call to the target. Refused where a `.fp` exists. |
 | `fp pin <pointer>` | the same checks, then rewrites the pin `fp` finds (or this folder's `.fp`) |
 | `fp upgrade` | a git pin only: resolves its branch again and writes the new commit |
-| `fp trust` | trusts the pin `fp` finds, asking on a terminal |
 | `fp where` | prints what the pin resolves to (the path, the checkout or the command) and the file it comes from |
 | `fp --version` | `fp`'s own version |
 
@@ -76,17 +75,10 @@ fp init npx -y @expofp/fp                   # a command
 fp guide                                    # runs the pinned tool's guide
 ```
 
-## Trust
+## No trust prompt
 
-A pin is a command your machine will run, and a pin can arrive with a repository you clone. So `fp`
-runs a pin only once it is trusted on this machine:
-
-- a pin written by `fp init` or `fp pin` here is trusted at once (`fp upgrade` keeps a pin's trust);
-- any other pin asks once on a terminal: ``Run `<pointer>` for <folder>? [y/N]``. Without a terminal
-  (agents run `fp` without one) it is an error that asks a person to run `fp trust` there.
-
-Trusted pins are kept as a hash of the folder and the pin line in `~/.config/fp/trusted` (Windows:
-`%APPDATA%\fp\trusted`). A pin that changes is a new pin.
+`fp` runs the pin it finds, as `npm install` or `make` run what a cloned repository holds: running
+`fp` in a folder trusts that folder. `fp where` shows what a pin runs before you run it.
 
 ## Errors
 
@@ -97,7 +89,6 @@ need, and what it says when one is missing:
 | Missing | Needed for | The fix it names |
 | --- | --- | --- |
 | `git` | a git pin's first checkout, `init`, `pin`, `upgrade` of git pins | macOS: `xcode-select --install`; Linux: the package manager; Windows: `winget install Git.Git` |
-| `shasum` or `sha256sum` | trust (`sh` only) | Linux: the `coreutils` package |
 | a command pin's first word | running it | ``npx`` / ``npm`` / ``node``: Node, https://nodejs.org; otherwise "`<word>` is not on the PATH" |
 | PowerShell 7 | Windows | `winget install Microsoft.PowerShell` |
 
@@ -109,7 +100,7 @@ A folder or repository `fp` can point at provides:
   twin for Windows;
 - the word `guide`, which prints how to work with it: `AGENTS.md` written by `fp init` tells agents
   to run `fp guide` first;
-- no words of its own named `init`, `pin`, `upgrade`, `trust`, `where` or `--version`: `fp` keeps
+- no words of its own named `init`, `pin`, `upgrade`, `where` or `--version`: `fp` keeps
   those and never passes them on.
 
 The target runs in the folder `fp` was run in, with every argument as given; its exit code is
