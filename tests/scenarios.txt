@@ -13,7 +13,7 @@
 #   target <dir>        makes a target: <dir>/bin/fp and bin/fp.ps1 print "<name of dir>: <args>",
 #                       and with the arguments "exit <n>" exit with <n>
 #   write <file> <text> writes the text and a newline (no text: an empty file)
-#   remove <file>       removes the file
+#   remove <file>       removes the file and its .ps1 twin
 #   fp <dir> <args>     runs fp in <dir>; it must succeed
 #   commit              moves the fixture's main to $SHA2
 #   nogit               the row's run (not setup) has no git on the PATH

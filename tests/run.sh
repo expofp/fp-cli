@@ -86,7 +86,7 @@ row() {
 		dir) mkdir -p "$W/$1" ;;
 		target) make_target "$W/$1" "${1##*/}" ;;
 		write) f=$1; shift; mkdir -p "$(dirname "$W/$f")"; if [ $# -gt 0 ]; then printf '%s\n' "$*"; fi >"$W/$f" ;;
-		remove) rm -f "$W/$1" ;;
+		remove) rm -f "$W/$1" "$W/$1.ps1" ;;
 		fp) d=$1; shift; run_fp "$W/$d" "$@"; [ "$CODE" = 0 ] || { fail "setup fp $*: $CODE $OUT"; return; } ;;
 		commit) git -C "$W/repos/example.test/acme/tool.git" update-ref refs/heads/main "$SHA2" ;;
 		nogit) nogit=1 ;;

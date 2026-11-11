@@ -95,4 +95,7 @@ commit by path; push after every commit.
 ## Where it stands
 
 - `main`: README, pushed. Work on branch `fp-v0` in the worktree `.claude/worktrees/fp-v0` (`.claude/` and `now.md` excluded in `.git/info/exclude`).
-- Next: `fp`, `fp.ps1`, `fp.cmd`, the scenario table and its runners, README.
+- PR https://github.com/expofp/fp-cli/pull/1 ready for lead: `fp`, `fp.ps1`, `fp.cmd`, `tests/` (scenarios.txt, run.sh, run.ps1), README, `.gitattributes` (`fp.cmd` CRLF).
+- Gate: `shellcheck fp tests/run.sh` clean; `tests/run.sh` 118/118 (59 rows under /bin/sh and dash); `pwsh tests/run.ps1` 59/59. Trust prompt on a terminal checked by hand with `expect` in sh and pwsh (n refuses, y runs and is remembered). `fp.cmd` read only.
+- Choices made where the brief was open: lookup finds the git root by a `.git` entry (no git needed); `fp trust` without a terminal is an error (else agents could trust on their own); `fp upgrade` keeps the pin's trust as it was; a command's first word with a `/` is refused as a relative path; usage errors exit 2, other fp errors 1; git URL is `https://<host>/<path>.git`; cache: `~/.cache/fp/git/<host>/<path>.git` (bare, blob:none) and `checkouts/<host>/<path>/<sha>` (plain files via `read-tree -u`).
+- Next: lead merges (squash); then efp's `fp-entry` PR (see above); after lead's word, tag `v0.1.0` and a release with `fp`, `fp.cmd`, `fp.ps1`. Remove this file in the last commit before the merge.
