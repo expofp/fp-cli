@@ -29,11 +29,15 @@
 #   nofile <file>       the file does not exist
 
 # fp's own words
-version | | . | --version | 0 | out 0.2.0
+version | | . | --version | 0 | out 0.2.1
 no pin, no word | | . | | 2 | out fp init <pointer> ; out usage: fp
 no pin, a word | | . | guide | 2 | out no .fp here or in any folder above ; out usage: fp
 words take no arguments | | . | where now | 2 | out fp where takes no arguments
 init needs a pointer | | . | init | 2 | out fp init needs a pointer
+init --help | | . | init --help | 0 | out usage: fp init <pointer> ; out a pointer: /abs/path ; nofile .fp ; nofile AGENTS.md
+init -h | | . | init -h | 0 | out usage: fp init <pointer> ; nofile .fp
+init --help where a .fp exists | target t1 ; fp . init $W/t1 | . | init --help | 0 | out usage: fp init <pointer> ; noout already exists ; first .fp $W/t1
+init -h where a .fp exists | target t1 ; fp . init $W/t1 | . | init -h | 0 | out usage: fp init <pointer> ; noout already exists
 
 # init
 init a path | repo . ; target t1 | . | init $W/t1 | 0 | first .fp $W/t1 ; first AGENTS.md Run `fp guide` first and follow it. ; first CLAUDE.md @AGENTS.md

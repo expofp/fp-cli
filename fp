@@ -4,7 +4,7 @@
 # shellcheck disable=SC2015,SC2016,SC2088 # A && B || die is meant; backticks and ~ are text
 set -f
 
-FP_VERSION=0.2.0
+FP_VERSION=0.2.1
 AGENTS_LINE='Run `fp guide` first and follow it.'
 CLAUDE_LINE='@AGENTS.md'
 CACHE=$HOME/.cache/fp
@@ -173,6 +173,15 @@ add_line() { # file line
 
 cmd_init() {
 	[ $# -gt 0 ] || usage_error "fp init needs a pointer"
+	case $1 in
+	--help | -h)
+		printf '%s\n' \
+			'usage: fp init <pointer>   pin this folder: writes .fp, AGENTS.md and CLAUDE.md' \
+			'a pointer: /abs/path | ~/path | git:<host>/<owner>/<repo>@<branch> | <command> [args]' \
+			'refused where a .fp exists: change it with fp pin <pointer> (or fp upgrade for a git pin)'
+		return
+		;;
+	esac
 	[ -e .fp ] && die ".fp already exists here; change it with fp pin <pointer> (or fp upgrade for a git pin)"
 	check_pointer "$*"
 	write_pin .fp "$LINE"
