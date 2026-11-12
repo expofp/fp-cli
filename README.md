@@ -77,7 +77,7 @@ These words are `fp`'s own; every other word goes to the target.
 
 | Word | Does |
 | --- | --- |
-| `fp init <pointer>` | pins this folder: checks the pointer can run, then writes `.fp`; `AGENTS.md` with the one line ``Run `fp guide` first and follow it.``; `CLAUDE.md` with `@AGENTS.md`. An existing `AGENTS.md` or `CLAUDE.md` is kept, the line added at the top when it is missing. Nothing else: no folders, no `git init`, no call to the target. Refused where a `.fp` exists. |
+| `fp init <pointer>` | pins this folder: checks the pointer can run, then writes `.fp`; `AGENTS.md` with the one line ``Run `fp guide` first and follow it.``; `CLAUDE.md` with `@AGENTS.md`. An existing `AGENTS.md` or `CLAUDE.md` is kept, the line added at the top when it is missing. Nothing else: no folders, no `git init`, no call to the target. Refused where a `.fp` exists. `fp init --help` (or `-h`) prints its usage, there too. |
 | `fp pin <pointer>` | the same checks, then rewrites the pin `fp` finds (or this folder's `.fp`) |
 | `fp upgrade` | a git pin only: resolves its branch again and writes the new commit |
 | `fp where` | prints what the pin resolves to (the path, the checkout or the command) and the file it comes from |

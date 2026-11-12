@@ -4,7 +4,7 @@
 Set-StrictMode -Version 3.0
 $ErrorActionPreference = 'Stop'
 
-$FpVersion = '0.2.0'
+$FpVersion = '0.2.1'
 $AgentsLine = 'Run `fp guide` first and follow it.'
 $ClaudeLine = '@AGENTS.md'
 if ($IsWindows) {
@@ -175,6 +175,12 @@ function Add-Line([string]$File, [string]$Line) {
 
 function Invoke-Init([string[]]$Rest) {
 	if (-not $Rest) { Stop-Usage 'fp init needs a pointer' }
+	if ($Rest[0] -ceq '--help' -or $Rest[0] -ceq '-h') {
+		Say 'usage: fp init <pointer>   pin this folder: writes .fp, AGENTS.md and CLAUDE.md'
+		Say 'a pointer: /abs/path | ~/path | git:<host>/<owner>/<repo>@<branch> | <command> [args]'
+		Say 'refused where a .fp exists: change it with fp pin <pointer> (or fp upgrade for a git pin)'
+		return
+	}
 	if (Test-Path -LiteralPath (Join-Path $Cwd '.fp')) { Die '.fp already exists here; change it with fp pin <pointer> (or fp upgrade for a git pin)' }
 	$line = Test-Pointer ($Rest -join ' ')
 	Write-PinFile (Join-Path $Cwd '.fp') $line
